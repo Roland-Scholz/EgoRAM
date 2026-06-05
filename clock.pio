@@ -1,0 +1,45 @@
+;
+; Title:
+; Description:		
+; Author:	        
+; Created:	        
+; Last Updated:	    
+;
+; Modinfo:
+; 07/12/2025:       
+
+.program clock
+.wrap_target
+    set pins, 1       ; Turn on
+    set pins, 0       ; Turn off
+.wrap						; Loop back to wrap_target
+
+
+
+% c-sdk {
+//
+// Initialise the PIO
+// Parameters:
+// - pio: The PIO to attach this to
+// - sm: The state machine number
+// - offset: The instruction memory offset the program is loaded at
+// - pin_base: The number of the first GPIO pin to use in the PIO
+// - pin_count: The number of consecutive GPIO pins to write to
+// - freq: The frequency of the PIO state machine
+// 
+void clock_initialise_pio(PIO pio, uint sm, uint offset, uint pin_base, uint pin_count, double freq) {
+    for(uint i=pin_base; i<pin_base+pin_count; i++) {
+        pio_gpio_init(pio, i);
+        gpio_set_slew_rate(i, GPIO_SLEW_RATE_FAST);
+        gpio_set_drive_strength(i, GPIO_DRIVE_STRENGTH_12MA);
+    }
+    pio_sm_set_pins_with_mask(pio, sm, 1u << pin_base, 1u << pin_base);
+    pio_sm_set_consecutive_pindirs(pio, sm, pin_base, pin_count, true);
+    pio_sm_config c = clock_program_get_default_config(offset);
+    sm_config_set_set_pins(&c, pin_base, pin_count);
+    //sm_config_set_set_shift(&c, true, true, 8);
+    pio_sm_init(pio, sm, offset, &c);
+    pio->sm[sm].clkdiv = (uint32_t) (freq * (1 << 16));
+	//pio_sm_set_enabled(pio, sm, true);
+}
+%}
