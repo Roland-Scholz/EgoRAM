@@ -94,9 +94,11 @@ void __not_in_flash_func(emulate_roland)()
 		addr = pins & ADDR_GPIO_MASK;
 
 		ram_ptr = NULL;
-		if ((pins & S5_GPIO_MASK) == 0)
+		if ((pins & S4_GPIO_MASK) == 0)
 			ram_ptr = cart_ram;
-		if ((pins & CCTL_GPIO_MASK) == 0)
+		else if ((pins & S5_GPIO_MASK) == 0)
+			ram_ptr = &cart_ram[0x8000];
+		else if ((pins & CCTL_GPIO_MASK) == 0)
 			ram_ptr = cart_d5xx;
 
 		if (ram_ptr != NULL)
@@ -117,7 +119,7 @@ void __not_in_flash_func(emulate_roland)()
 				}
 				else if (writeable)
 				{
-					cart_ram[addr] = data;
+					ram_ptr[addr] = data;
 				}
 			}
 			else

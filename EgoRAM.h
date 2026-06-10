@@ -28,6 +28,7 @@
 #define EGO_CMD_SET_SPRITE_XY 12
 #define EGO_CMD_SET_BLIT_WIDTH 13
 #define EGO_CMD_SET_BLIT_HEIGHT 14
+#define EGO_CMD_MOVEMENT 15
 
 #define EGO_ST_IDLE 0
 #define EGO_ST_SHAPE_NO 1
@@ -42,6 +43,8 @@
 #define EGO_ST_SPRITE_Y_HI 10
 #define EGO_ST_SPRITE_ENA 11
 #define EGO_ST_SPRITE_DIS 12
+#define EGO_ST_BLITWITH 13
+#define EGO_ST_BLITHEIGHT 14
 
 /*
 Sprite data:
@@ -59,7 +62,8 @@ typedef struct
 	uint8_t *data;
 } shape_t;
 
-typedef struct{
+typedef struct
+{
 	uint8_t enabled;
 	uint16_t xpos;
 	uint16_t ypos;
@@ -77,4 +81,5 @@ uint16_t get_blitheight();
 void sprite_draw_all();
 void sprite_draw(sprite_t *sp);
 void write_d5xx(uint8_t addr, uint8_t data);
+uint8_t read_d5xx(uint8_t addr);
 void ego_log(const char *format, ...);
