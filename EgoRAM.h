@@ -28,7 +28,8 @@
 #define EGO_CMD_SET_SPRITE_XY 12
 #define EGO_CMD_SET_BLIT_WIDTH 13
 #define EGO_CMD_SET_BLIT_HEIGHT 14
-#define EGO_CMD_MOVEMENT 15
+#define EGO_CMD_LINE_PTR 15
+#define EGO_CMD_MOVEMENT 99
 
 #define EGO_ST_IDLE 0
 #define EGO_ST_SHAPE_NO 1
@@ -45,6 +46,9 @@
 #define EGO_ST_SPRITE_DIS 12
 #define EGO_ST_BLITWITH 13
 #define EGO_ST_BLITHEIGHT 14
+#define EGO_ST_LINE_NO 15
+#define EGO_ST_LINE_DATA_LO 16
+#define EGO_ST_LINE_DATA_HI 17
 
 /*
 Sprite data:

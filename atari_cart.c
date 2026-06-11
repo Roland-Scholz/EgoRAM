@@ -95,9 +95,11 @@ void __not_in_flash_func(emulate_roland)()
 
 		ram_ptr = NULL;
 		if ((pins & S4_GPIO_MASK) == 0)
-			ram_ptr = cart_ram;
+			// ram_ptr = cart_ram;
+			ram_ptr = NULL;
 		else if ((pins & S5_GPIO_MASK) == 0)
-			ram_ptr = &cart_ram[0x8000];
+			// ram_ptr = &cart_ram[0x2000];
+			ram_ptr = cart_ram;
 		else if ((pins & CCTL_GPIO_MASK) == 0)
 			ram_ptr = cart_d5xx;
 

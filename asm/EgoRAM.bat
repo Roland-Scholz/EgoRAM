@@ -5,7 +5,7 @@ set SOURCE=%RELEASE%.asm
 set TARGET=%RELEASE%.xex
 ..\bin\mads -o:%TARGET% -l -t %SOURCE%
 if errorlevel 1 goto :error
-rem start %TARGET% 
+rem 	start %TARGET% 
 goto :eof
 
 :error
