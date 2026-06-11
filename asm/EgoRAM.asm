@@ -204,7 +204,7 @@ waitvcnt
 	cmp #10
 	bcc waitvcnt
 	
-	lda #$14
+	lda #$0f
 	sta COLBK
 
 	lda #EGO_CMD_RENDER_SPRITES
