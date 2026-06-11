@@ -37,7 +37,8 @@ RANDOM			= $D20A
 
 cnt	= $14
 
-sm	= $a010
+;sm	= $a010
+sm	= $8010
 sm_width = 40
 screen_lines = 192
 lines_4k=102

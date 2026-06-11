@@ -39,6 +39,8 @@ S5      1   gpio 25
 #include "hardware/pll.h"
 #include "hardware/structs/systick.h"
 #include "hardware/vreg.h"
+#include "hardware/structs/bus_ctrl.h"
+#include "hardware/regs/busctrl.h"
 
 #include "vt100_font_8x8.h"
 #include "atari_cart.h"
@@ -46,8 +48,6 @@ S5      1   gpio 25
 #include "cvideo.h"
 
 char c;
-int posx, posy;
-char *vram;
 
 int dx_array[EGO_MAX_SPRITES];
 int dy_array[EGO_MAX_SPRITES];
@@ -105,6 +105,23 @@ void __not_in_flash_func(set_blitheight)(uint16_t height)
     ego_blitheight = height;
 }
 
+uint8_t read_vram(uint16_t addr)
+{
+    return video_ram[addr];
+}
+
+void write_vram(uint16_t addr, uint8_t data)
+{
+    if (addr >= 0x1fff)
+    {
+        ego_log("error vram addr: %d\n", addr);
+    }
+    else
+    {
+        video_ram[addr] = data;
+    }
+}
+
 void __not_in_flash_func(sprite_draw)(sprite_t *sp)
 {
 
@@ -114,7 +131,7 @@ void __not_in_flash_func(sprite_draw)(sprite_t *sp)
     int height = shape_array[sp->shape_no].height;
 
     int pixx = xpos & 0x07;
-    int bytex = xpos >> 3;
+    int bytex = (xpos >> 3);
 
     int ystart;
     int vstart;
@@ -122,9 +139,9 @@ void __not_in_flash_func(sprite_draw)(sprite_t *sp)
     int vdiff;
     int x, y;
 
-    volatile uint8_t *vpos;
+    uint16_t vpos;
     uint8_t *sppos;
-    char c;
+    uint8_t b, c;
 
     // ego_log("blitwidth: %d, blitheight %d\n", ego_blitwidth, ego_blitheight);
     // ego_log("sprite_draw: shape_no:%d, x:%d y:%d, width:%d, height: %d \n", sp->shape_no, xpos, ypos, width, height);
@@ -166,18 +183,33 @@ void __not_in_flash_func(sprite_draw)(sprite_t *sp)
     for (y = 0; y < ylen; y++)
     {
         c = 0;
-        vpos = &video_ram[ego_line_ptr[vstart + y]];
+
+        // vpos = &video_ram[ego_line_ptr[vstart + y]];
+        vpos = ego_line_ptr[vstart + y] + bytex;
+
+        if (vstart + y >= 192)
+            ego_log("vstart too high %d\n", vstart + y);
+
         for (x = 0; x < width; x++)
         {
             if (bytex + x >= 0 && bytex + x < ego_blitwidth)
-                vpos[bytex + x] ^= (c | (sppos[x] >> pixx));
+            {
+                b = read_vram(vpos + x);
+                b ^= (c | (sppos[x] >> pixx));
+                write_vram(vpos + x, b);
+            }
+            // vpos[bytex + x] ^= (c | (sppos[x] >> pixx));
             c = (sppos[x]) << (8 - pixx);
         }
 
         if (bytex + x >= 0 && bytex + x < ego_blitwidth)
         {
-            vpos = &video_ram[ego_line_ptr[vstart + y]];
-            vpos[bytex + x] ^= c;
+            // vpos = &video_ram[ego_line_ptr[vstart + y]];
+            // vpos[bytex + x] ^= c;
+            vpos = ego_line_ptr[vstart + y] + bytex;
+            b = read_vram(vpos + x);
+            b ^= c;
+            write_vram(vpos + x, b);
         }
 
         sppos += width;
@@ -527,9 +559,8 @@ void test()
     write_d5xx(EGO_REG_DATA, (uint8_t)height);
 
     write_d5xx(EGO_REG_CMD, EGO_CMD_LINE_PTR);
-    write_d5xx(EGO_REG_DATA, 192);
-
-    for (x = 0; x < 192; x++)
+    write_d5xx(EGO_REG_DATA, 200);
+    for (x = 0; x < 200; x++)
     {
         write_d5xx(EGO_REG_DATA, ptr & 0xff);
         write_d5xx(EGO_REG_DATA, ptr >> 8);
@@ -609,6 +640,12 @@ void test()
     }
 }
 
+void set_core0_highest_bus_priority()
+{
+    // Setzt die Bus-Priorität für Kern 0 auf hoch (1) und Kern 1 auf niedrig (0)
+    bus_ctrl_hw->priority = BUSCTRL_BUS_PRIORITY_PROC0_BITS;
+}
+
 int main()
 {
     vreg_set_voltage(VREG_VOLTAGE_1_20);
@@ -669,6 +706,9 @@ int main()
 
     if (mode == EGO_MODE_ATARI)
     {
+        // irq_set_enabled(USBCTRL_IRQ, false);
+        uint32_t status = save_and_disable_interrupts();
+        set_core0_highest_bus_priority();
         atari_cart_main();
     }
 
