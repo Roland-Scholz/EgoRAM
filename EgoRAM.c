@@ -67,7 +67,7 @@ static uint32_t ego_state;
 static uint32_t ego_shape_no;
 static uint32_t ego_sprite_no;
 static uint32_t ego_line_no;
-static uint32_t ego_line_cnt;
+static uint32_t ego_cnt;
 static uint32_t ego_shape_width;
 static uint32_t ego_shape_height;
 static uint16_t ego_blitwidth;
@@ -78,6 +78,9 @@ static shape_t shape_array[EGO_MAX_SHAPES];
 static sprite_t sprite_array[EGO_MAX_SPRITES];
 
 static PIO pio = pio0;
+
+static uint8_t manta[] = {
+    0x00, 0x00, 0x00, 0x0F, 0xFF, 0x00, 0x3D, 0x57, 0xFF, 0x37, 0xFD, 0xD5, 0xF7, 0xD5, 0x70, 0xDF, 0x7F, 0xFC, 0xDD, 0xFA, 0xBC, 0xDD, 0xEA, 0xEC, 0xD5, 0xFF, 0xAD, 0xFF, 0xEB, 0xAF, 0xD5, 0xEB, 0xFD, 0xFF, 0xEB, 0xAF, 0xD5, 0xFF, 0xAD, 0xDD, 0xEA, 0xEC, 0xDD, 0xFA, 0xBC, 0xDF, 0x7F, 0xFC, 0xF7, 0xD5, 0x70, 0x37, 0xFD, 0xFF, 0x3D, 0x57, 0xD5, 0x0F, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00};
 
 static void systick_init(void)
 {
@@ -129,14 +132,14 @@ void __not_in_flash_func(sprite_draw)(sprite_t *sp)
     int ypos = sp->ypos;
     int width = shape_array[sp->shape_no].width;
     int height = shape_array[sp->shape_no].height;
+    int bpp = shape_array[sp->shape_no].bitsperpix;
 
-    int pixx = xpos & 0x07;
-    int bytex = (xpos >> 3);
+    int pixx = (xpos << (bpp - 1)) & 0x07;
+    int bytex = (xpos >> (4 - bpp));
 
-    int ystart;
-    int vstart;
-    int ylen;
-    int vdiff;
+    int xstart, ystart;
+    int xvstart, vstart;
+    int xlen, ylen;
     int x, y;
 
     uint16_t vpos;
@@ -144,69 +147,68 @@ void __not_in_flash_func(sprite_draw)(sprite_t *sp)
     uint8_t b, c;
 
     // ego_log("blitwidth: %d, blitheight %d\n", ego_blitwidth, ego_blitheight);
-    // ego_log("sprite_draw: shape_no:%d, x:%d y:%d, width:%d, height: %d \n", sp->shape_no, xpos, ypos, width, height);
+    // ego_log("sprite_draw: shape_no:%d, x:%d y:%d, width:%d, height: %d, bpp: %d\n", sp->shape_no, xpos, ypos, width, height, bpp);
 
-    /*
-    for (y = 0; y < height; y++)
+    if (bytex >= ego_blitwidth + width || ypos > ego_blitheight + height)
     {
-        for (x = 0; x < width; x++)
-        {
-            ego_log("%02X ", shape_array[sp->shape_no].data[y * width + x]);
-        }
-        ego_log("\n");
+        return;
     }
-    */
 
-    // if (xpos < 0 || ypos < 0)
-    //    return;
-
+    // vertical start in shape data (top bound)
     ystart = height - ypos;
     if (ystart < 0)
         ystart = 0;
 
+    // vertical number of lines of shape data
     ylen = height - ystart;
 
+    // check bottom bound
+    if (ypos >= ego_blitheight + height)
+    {
+        ylen = ego_blitheight + height - ypos;
+    }
+
+    // line of screen RAM
     vstart = ypos - height;
     if (vstart < 0)
         vstart = 0;
 
-    vdiff = ego_blitheight + height - ypos;
-    if (vdiff < height)
-    {
-        ylen = vdiff;
-    }
+    xstart = width - bytex;
+    if (xstart < 0)
+        xstart = 0;
+    xlen = width - xstart;
 
-    sppos = &(shape_array[sp->shape_no].data[ystart * width]);
+    xvstart = bytex - width;
+    if (xvstart < 0)
+        xvstart = 0;
 
-    // ego_log("sprite xpos:%d ypos:%d bytex: %d pixx:%d ystart:%d ylen:%d vstart:%d \n", xpos, ypos, bytex, pixx, ystart, ylen, vstart);
+    if (bytex > ego_blitwidth)
+        xlen = bytex - ego_blitwidth;
+
+    sppos = &(shape_array[sp->shape_no].data[ystart * width + xstart]);
+
+    // ego_log("sprite bytex: %d pixx:%d xstart: %d xlen: %d xvstart: %d ystart:%d ylen:%d vstart:%d \n", bytex, pixx, xstart, xlen, xvstart, ystart, ylen, vstart);
 
     for (y = 0; y < ylen; y++)
     {
+
+        vpos = ego_line_ptr[vstart + y] + xvstart;
+
         c = 0;
+        if (xstart > 0)
+            c = (sppos[-1]) << (8 - pixx);
 
-        // vpos = &video_ram[ego_line_ptr[vstart + y]];
-        vpos = ego_line_ptr[vstart + y] + bytex;
-
-        if (vstart + y >= 192)
-            ego_log("vstart too high %d\n", vstart + y);
-
-        for (x = 0; x < width; x++)
+        for (x = 0; x < xlen; x++)
         {
-            if (bytex + x >= 0 && bytex + x < ego_blitwidth)
-            {
-                b = read_vram(vpos + x);
-                b ^= (c | (sppos[x] >> pixx));
-                write_vram(vpos + x, b);
-            }
-            // vpos[bytex + x] ^= (c | (sppos[x] >> pixx));
+            b = read_vram(vpos + x);
+            b ^= (c | (sppos[x] >> pixx));
+            write_vram(vpos + x, b);
+
             c = (sppos[x]) << (8 - pixx);
         }
 
-        if (bytex + x >= 0 && bytex + x < ego_blitwidth)
+        if (bytex < ego_blitwidth)
         {
-            // vpos = &video_ram[ego_line_ptr[vstart + y]];
-            // vpos[bytex + x] ^= c;
-            vpos = ego_line_ptr[vstart + y] + bytex;
             b = read_vram(vpos + x);
             b ^= c;
             write_vram(vpos + x, b);
@@ -291,15 +293,18 @@ void __not_in_flash_func(do_data)(uint8_t data)
             free(shape_array[ego_shape_no].data);
         }
         shape_array[ego_shape_no].data = malloc(shape_array[ego_shape_no].width * shape_array[ego_shape_no].height);
-        shape_array[ego_shape_no].count = 0;
-
+        ego_state = EGO_ST_SHAPE_BPP;
+        break;
+    case EGO_ST_SHAPE_BPP:
+        shape_array[ego_shape_no].bitsperpix = data;
         ego_state = EGO_ST_SHAPE_DATA;
+        ego_cnt = 0;
         break;
     case EGO_ST_SHAPE_DATA:
-        shape_array[ego_shape_no].data[shape_array[ego_shape_no].count] = data;
-        shape_array[ego_shape_no].count++;
+        shape_array[ego_shape_no].data[ego_cnt] = data;
+        ego_cnt++;
 
-        if (shape_array[ego_shape_no].count == shape_array[ego_shape_no].width * shape_array[ego_shape_no].height)
+        if (ego_cnt == shape_array[ego_shape_no].width * shape_array[ego_shape_no].height)
         {
             ego_state = EGO_ST_IDLE;
         }
@@ -359,19 +364,19 @@ void __not_in_flash_func(do_data)(uint8_t data)
         break;
     case EGO_ST_LINE_NO:
         ego_line_no = data;
-        ego_line_cnt = 0;
+        ego_cnt = 0;
         ego_state = EGO_ST_LINE_DATA_LO;
         break;
     case EGO_ST_LINE_DATA_LO:
-        ego_line_ptr[ego_line_cnt] = data;
+        ego_line_ptr[ego_cnt] = data;
         ego_state = EGO_ST_LINE_DATA_HI;
         break;
     case EGO_ST_LINE_DATA_HI:
-        ego_line_ptr[ego_line_cnt++] |= (data & 0x1f) << 8;
-        if (ego_line_cnt >= ego_line_no)
+        ego_line_ptr[ego_cnt++] |= (data & 0x1f) << 8;
+        if (ego_cnt >= ego_line_no)
         {
             ego_state = EGO_ST_IDLE;
-            ego_log("cnt:%d %04X\n", ego_line_cnt, ego_line_ptr[ego_line_cnt - 1]);
+            ego_log("cnt:%d %04X\n", ego_cnt, ego_line_ptr[ego_cnt - 1]);
         }
         else
             ego_state = EGO_ST_LINE_DATA_LO;
@@ -514,7 +519,7 @@ void __not_in_flash_func(write_d5xx)(uint8_t addr, uint8_t data)
     {
         multicore_fifo_push_blocking(addr | (data << 16));
     }
-    else 
+    else
     {
         ego_log("write to FiFo failed\n");
     }
@@ -556,6 +561,9 @@ void test()
 {
     int width = 40;
     int height = 200;
+    uint16_t xpos = 20;
+    uint16_t ypos = 20;
+
     int x, y, c;
     uint16_t ptr = 0;
 
@@ -590,38 +598,62 @@ void test()
         for (x = 0; x < width; x++)
         {
             putChar(x, y, c);
-            c++;
+            // c++;
         }
     }
 
     write_d5xx(EGO_REG_CMD, EGO_CMD_SHAPE_DATA);
     write_d5xx(EGO_REG_DATA, 0x00); // shape number
-    write_d5xx(EGO_REG_DATA, 0x01); // shape width
-    write_d5xx(EGO_REG_DATA, 0x08); // shape height
-    write_d5xx(EGO_REG_DATA, 0xff); // shape data
-    write_d5xx(EGO_REG_DATA, 0xff); // shape data
-    write_d5xx(EGO_REG_DATA, 0xff); // shape data
-    write_d5xx(EGO_REG_DATA, 0xff); // shape data
-    write_d5xx(EGO_REG_DATA, 0xff); // shape data
-    write_d5xx(EGO_REG_DATA, 0xff); // shape data
-    write_d5xx(EGO_REG_DATA, 0xff); // shape data
-    write_d5xx(EGO_REG_DATA, 0xff); // shape data
+    write_d5xx(EGO_REG_DATA, 3);    // shape width
+    write_d5xx(EGO_REG_DATA, 21);   // shape height
+    write_d5xx(EGO_REG_DATA, 1);    // shape bpp
 
-    for (int i = 0; i < EGO_MAX_SPRITES; i++)
+    for (y = 0; y < 21; y++)
+    {
+        for (x = 0; x < 3; x++)
+        {
+            write_d5xx(EGO_REG_DATA, manta[y * 3 + x]);
+        }
+    }
+
+    /*
+        write_d5xx(EGO_REG_DATA, 0xff); // shape data
+        write_d5xx(EGO_REG_DATA, 0xff); // shape data
+        write_d5xx(EGO_REG_DATA, 0xff); // shape data
+        write_d5xx(EGO_REG_DATA, 0xff); // shape data
+        write_d5xx(EGO_REG_DATA, 0xff); // shape data
+        write_d5xx(EGO_REG_DATA, 0xff); // shape data
+        write_d5xx(EGO_REG_DATA, 0xff); // shape data
+        write_d5xx(EGO_REG_DATA, 0xff); // shape data
+        write_d5xx(EGO_REG_DATA, 0xff); // shape data
+        write_d5xx(EGO_REG_DATA, 0xff); // shape data
+        write_d5xx(EGO_REG_DATA, 0xff); // shape data
+        write_d5xx(EGO_REG_DATA, 0xff); // shape data
+        write_d5xx(EGO_REG_DATA, 0xff); // shape data
+        write_d5xx(EGO_REG_DATA, 0xff); // shape data
+        write_d5xx(EGO_REG_DATA, 0xff); // shape data
+        write_d5xx(EGO_REG_DATA, 0xff); // shape data
+    */
+
+    for (x = 0; x < EGO_MAX_SPRITES; x++)
     {
         write_d5xx(EGO_REG_CMD, EGO_CMD_SPRITE_DATA);
-        write_d5xx(EGO_REG_DATA, i);    // sprite number
+        write_d5xx(EGO_REG_DATA, x);    // sprite number
         write_d5xx(EGO_REG_DATA, 0x00); // shape number
 
         write_d5xx(EGO_REG_CMD, EGO_CMD_SET_SPRITE_XY);
-        write_d5xx(EGO_REG_DATA, i);                            // sprite number
+        write_d5xx(EGO_REG_DATA, x);                            // sprite number
         write_d5xx(EGO_REG_DATA, get_rand_32() % (width << 3)); // sprite X lo
-        write_d5xx(EGO_REG_DATA, 0x00);                         // sprite X hi
-        write_d5xx(EGO_REG_DATA, get_rand_32() % height);       // sprite Y lo
-        write_d5xx(EGO_REG_DATA, 0x00);                         // sprite Y hi
+        write_d5xx(EGO_REG_DATA, 0);                            // sprite X hi
+        // write_d5xx(EGO_REG_DATA, xpos & 0xff);                  // sprite X lo
+        // write_d5xx(EGO_REG_DATA, xpos >> 8);                    // sprite X hi
+        write_d5xx(EGO_REG_DATA, get_rand_32() % height); // sprite Y lo
+        write_d5xx(EGO_REG_DATA, 0);                      // sprite Y hi
+        // write_d5xx(EGO_REG_DATA, ypos & 0xff);                  // sprite Y lo
+        // write_d5xx(EGO_REG_DATA, ypos >> 8);                    // sprite Y hi
 
         write_d5xx(EGO_REG_CMD, EGO_CMD_ENA_SPRITE);
-        write_d5xx(EGO_REG_DATA, i); // sprite number
+        write_d5xx(EGO_REG_DATA, x); // sprite number
     }
 
     write_d5xx(EGO_REG_CMD, EGO_CMD_RENDER_SPRITES);
@@ -631,18 +663,38 @@ void test()
         c = getchar();
         printf("%c", c);
 
-        /*
         write_d5xx(EGO_REG_CMD, EGO_CMD_RENDER_SPRITES);
-        while (read_d5xx(EGO_REG_STATUS) & 0x80)
+        while (read_d5xx(EGO_REG_STATUS & 0x80))
             ;
 
-        sprite_array[0].xpos++;
-        sprite_array[0].ypos++;
+        switch (c)
+        {
+        case 's':
+            ypos--;
+            break;
+        case 'x':
+            ypos++;
+            break;
+        case 'a':
+            xpos--;
+            break;
+        case 'd':
+            xpos++;
+            break;
+        default:
+            break;
+        }
+
+        write_d5xx(EGO_REG_CMD, EGO_CMD_SET_SPRITE_XY);
+        write_d5xx(EGO_REG_DATA, 0);
+        write_d5xx(EGO_REG_DATA, xpos & 0xff);
+        write_d5xx(EGO_REG_DATA, xpos >> 8);
+        write_d5xx(EGO_REG_DATA, ypos & 0xff);
+        write_d5xx(EGO_REG_DATA, ypos >> 8);
 
         write_d5xx(EGO_REG_CMD, EGO_CMD_RENDER_SPRITES);
-        while (read_d5xx(EGO_REG_STATUS) & 0x80)
+        while (read_d5xx(EGO_REG_STATUS & 0x80))
             ;
-        */
     }
 }
 
@@ -681,9 +733,10 @@ int main()
     video_ram = get_cart_ram();
     cart_d5xx = get_cart_d5xx();
 
-    memset((void *)video_ram, 0x01, 4 * 1024);
-    memset((void *)video_ram + 0x1000, 0x10, 4 * 1024);
+    // memset((void *)video_ram, 0x01, 4 * 1024);
+    // memset((void *)video_ram + 0x1000, 0x10, 4 * 1024);
     memset((void *)video_ram + 0x2000, 0xaa, 8 * 1024);
+
     memset((void *)sprite_array, 0x00, sizeof(sprite_array));
     memset((void *)shape_array, 0x00, sizeof(shape_array));
 

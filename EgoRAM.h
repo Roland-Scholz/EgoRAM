@@ -35,20 +35,21 @@
 #define EGO_ST_SHAPE_NO 1
 #define EGO_ST_SHAPE_WIDTH 2
 #define EGO_ST_SHAPE_HEIGHT 3
-#define EGO_ST_SHAPE_DATA 4
-#define EGO_ST_SPRITE_NO 5
-#define EGO_ST_SPRITE_SHAPE_NO 6
-#define EGO_ST_SPRITE_X_LO 7
-#define EGO_ST_SPRITE_X_HI 8
-#define EGO_ST_SPRITE_Y_LO 9
-#define EGO_ST_SPRITE_Y_HI 10
-#define EGO_ST_SPRITE_ENA 11
-#define EGO_ST_SPRITE_DIS 12
-#define EGO_ST_BLITWITH 13
-#define EGO_ST_BLITHEIGHT 14
-#define EGO_ST_LINE_NO 15
-#define EGO_ST_LINE_DATA_LO 16
-#define EGO_ST_LINE_DATA_HI 17
+#define EGO_ST_SHAPE_BPP 4
+#define EGO_ST_SHAPE_DATA 5
+#define EGO_ST_SPRITE_NO 6
+#define EGO_ST_SPRITE_SHAPE_NO 7
+#define EGO_ST_SPRITE_X_LO 8
+#define EGO_ST_SPRITE_X_HI 9
+#define EGO_ST_SPRITE_Y_LO 10
+#define EGO_ST_SPRITE_Y_HI 11
+#define EGO_ST_SPRITE_ENA 12
+#define EGO_ST_SPRITE_DIS 13
+#define EGO_ST_BLITWITH 14
+#define EGO_ST_BLITHEIGHT 15
+#define EGO_ST_LINE_NO 16
+#define EGO_ST_LINE_DATA_LO 17
+#define EGO_ST_LINE_DATA_HI 18
 
 /*
 Sprite data:
@@ -60,9 +61,9 @@ bxx.yy	width*heigt data
 
 typedef struct
 {
-	uint16_t count;
 	uint8_t width;
 	uint8_t height;
+	uint8_t bitsperpix;
 	uint8_t *data;
 } shape_t;
 

@@ -29,7 +29,7 @@ EGO_CMD_LINE_PTR	= 15
 EGO_CMD_MOVEMENT 	= 99
 
 width			= 40
-widthpix		= width * 8
+widthpix		= 160
 height			= 192
 MAXSPRITES		= 32
 
@@ -48,10 +48,13 @@ size_4k=sm_width*lines_4k
 	
 	.proc main
 
-	mwa #dl $230	
-	mva #14 708
-	mva #08 709
-	mva #00 710
+	mwa #dl $230
+	
+	mva #$86 708
+	mva #$00 709
+	mva #$0f 710
+	mva #$18 711
+	mva #$00 712
 	
 	
 	ldx cnt
@@ -102,11 +105,13 @@ lineptr	lda ptr
 	mva #$00			EGO_REG_DATA		;shape no
 	mva #3				EGO_REG_DATA		;shape x bytes
 	mva #21				EGO_REG_DATA		;shape y lines
+	mva #2				EGO_REG_DATA		;shape bpp
 	
-	ldx #3*21
-	lda #$ff
-shape0	sta EGO_REG_DATA
-	dex
+	ldx #0
+shape0	lda mantaShipSprites,x
+	sta EGO_REG_DATA
+	inx
+	cpx #63
 	bne shape0
 
 ;
@@ -118,9 +123,12 @@ shape0	sta EGO_REG_DATA
 randx:	lda RANDOM
 	cmp #8
 	bcc randx
+	cmp #140
+	bcs randx
 	sta xpos,x
 	lda #0
 	sta xpos+1,x
+	
 	lda RANDOM
 	and #1
 	bne randxhi
@@ -195,49 +203,110 @@ render	lda #EGO_CMD_RENDER_SPRITES
 
 	lda #0
 	sta NMIEN
+	sta mantacnt
+	
+	lda #<mantaShipSprites
+	sta ptr
+	lda #>mantaShipSprites
+	sta ptr+1
+	
+	
 loop
+;	jmp loop
 	
 waitvcnt2
 	lda VCOUNT
 	cmp #112
-;	cmp #20
-	bcc waitvcnt2
+	bne waitvcnt2
 
+
+	
+
+;	ldy #0
+;	ldx #0
+;wait0	dex
+;	bne wait0
+;	dey
+;	bne wait0
+	
 waitvcnt
 ;	lda VCOUNT
 ;	cmp #8
 ;	bcc waitvcnt
 
-	lda #$02
-	sta COLBK
+;	lda #$02
+;	sta COLBK
 
 	lda #EGO_CMD_RENDER_SPRITES
 	jsr sendcmd
 
-	lda #$04
-	sta COLBK
-	jsr domove
+	dec mantajfy
+	bne moveit
 	
-	lda #$06
-	sta COLBK	
+	lda #4
+	sta mantajfy
+
+	ldy #0
+	mva #EGO_CMD_SHAPE_DATA		EGO_REG_CMD
+	mva #$00			EGO_REG_DATA		;shape no
+	mva #3				EGO_REG_DATA		;shape x bytes
+	mva #21				EGO_REG_DATA		;shape y lines
+	mva #2				EGO_REG_DATA		;shape bpp
+
+shapeloop
+	lda (ptr),y
+	sta EGO_REG_DATA
+	iny
+	cpy #63
+	bne shapeloop
+	
+	clc
+	lda ptr
+	adc #64
+	sta ptr
+	lda ptr+1
+	adc #0
+	sta ptr+1
+
+	inc mantacnt
+	lda mantacnt
+	cmp #32
+	bne moveit
+
+	lda #0
+	sta mantacnt
+	
+	lda #<mantaShipSprites
+	sta ptr
+	lda #>mantaShipSprites
+	sta ptr+1
+
+
+
+;	lda #$04
+;	sta COLBK
+moveit	jsr domove
+	
+;	lda #$06
+;	sta COLBK	
 	jsr checkmove
 
-	lda #$08
-	sta COLBK	
+;	lda #$08
+;	sta COLBK	
 	jsr setxy
 
-	lda #10
-	sta COLBK
+;	lda #$0a
+;	sta COLBK
 	lda #EGO_CMD_RENDER_SPRITES
 	jsr sendcmd
 
-	lda #$00
-	sta COLBK
+;	lda #$00	
+;	sta COLBK
 
 waitvcnt1
-	lda VCOUNT
+;	lda VCOUNT
 ;	cmp #2
-	bmi waitvcnt1
+;	bmi waitvcnt1
 
 	jmp loop
 
@@ -291,7 +360,7 @@ checkmove1
 	sbc xinc+1,x
 	sta xinc+1,x
 	
-	
+	jsr addinc
 
 checkmovey
 	
@@ -308,7 +377,7 @@ checkmovey
 	sbc yinc+1,x
 	sta yinc+1,x
 
-;	jsr addinc	
+	jsr addinc	
 
 checkmove2	
 	clc
@@ -368,16 +437,16 @@ senddw	bit EGO_REG_STATUS
 	bmi senddw
 	rts
 
-xpos	.word 0
-xinc	.word 0
-ypos	.word 0
-yinc	.word 0
+mantacnt	.byte 0
+mantajfy	.byte 8
 
+	icl "manta.asm"
+	
 	.endp
 	
 	.align $400
 	.local dl
-	dc =$0f
+	dc =$0e
 
 	.byte $70,$70,$70
 	.byte $40+dc,a(sm)
@@ -386,7 +455,14 @@ yinc	.word 0
 :89	.byte dc
 	.byte $41,a(dl)
 	.endl
-	
+
+;
+; one page
+;	
+xpos	.word 0
+xinc	.word 0
+ypos	.word 0
+yinc	.word 0
 	
 	run main
 
