@@ -1,2 +1,4 @@
 build
 !.vscode/*
+asm/System-Equates-Original.asm
+asm/System-Equates-Original-Work.asm

@@ -1,41 +1,8 @@
+
+	icl "System-Equates.asm"
+	icl "EgoRAM-Equates.asm"
+	
 ptr			= 0
-
-SAVMSC			= $58
-
-KBCODES			= $2fc
-
-COLBK			= $D01A
-
-KBCODE			= $D209
-RANDOM			= $D20A
-
-DLIST			= $D402
-VCOUNT			= $D40B
-NMIEN			= $D40E
-
-EGO_REG_CMD		= $D500
-EGO_REG_STATUS		= $D501
-EGO_REG_DATA		= $D502
-
-EGO_CMD_RENDER_SPRITES	= 0
-EGO_CMD_SET_WRITEABLE	= 1
-EGO_CMD_SET_READONLY	= 2
-EGO_CMD_ABORT		= 3
-EGO_CMD_SHAPE_DATA	= 4
-EGO_CMD_DEL_SHAPE	= 5
-EGO_CMD_SPRITE_DATA	= 6
-EGO_CMD_DEL_SPRITE	= 7
-EGO_CMD_ENA_SPRITE	= 8
-EGO_CMD_DIS_SPRITE	= 9
-EGO_CMD_SET_SPRITE_X	= 10
-EGO_CMD_SET_SPRITE_Y	= 11
-EGO_CMD_SET_SPRITE_XY	= 12
-EGO_CMD_SET_BLIT_WIDTH	= 13
-EGO_CMD_SET_BLIT_HEIGHT	= 14
-EGO_CMD_LINE_PTR	= 15
-EGO_CMD_FILL_MEM	= 16
-EGO_CMD_SPRITE_MODE	= 17
-EGO_CMD_MOVEMENT 	= 99
 
 WIDTH			= 40
 WIDTHPIX		= 160
@@ -50,10 +17,6 @@ DOWN			= $0f
 
 
 	org $2000
-
-CLOCK2			= $12
-CLOCK1			= $13
-CLOCK0			= $14
 
 ;sm	= $a010
 sm	= $8010
@@ -77,24 +40,24 @@ geoutch1:	sty	OUTCH+2
 		lda	SAVMSC+1
 		sta	text+1
 		
-		mwa #dl $230
+		mwa #dl sdlstl
 		
-		mva #$12 712	;00	backgound
-		mva #$86 708	;01	COLPF0
-		mva #$00 709	;10	COLPF1
-		mva #$0f 710	;11	COLPF2
+		mva #$12 color4	;00	backgound
+		mva #$86 color0	;01
+		mva #$00 color1	;10
+		mva #$0f color2	;11
 		
-		mva #$18 711
+		mva #$18 color3
 		
 ;keyloop	lda KBCODE
 ;		jsr puthex
 ;		jmp keyloop
 		
-		ldx CLOCK0
+		ldx rtclok+2
 		inx
 		inx
 	
-waitvbi		cpx CLOCK0
+waitvbi		cpx rtclok+2
 		bne waitvbi 
 	
 		lda #<sm
@@ -509,15 +472,19 @@ addinc		clc
 		rts
 		
 	
-sendcmd		sta EGO_REG_CMD
-sendcw		lda EGO_REG_STATUS
-		bmi sendcw
-		rts
+	.proc sendcmd	; IN: <A>=command
+	sta EGO_REG_CMD
+sendcw	lda EGO_REG_STATUS
+	bmi sendcw
+	rts
+	.endp
 	
-senddat		sta EGO_REG_DATA
-senddw		bit EGO_REG_STATUS
-		bmi senddw
-		rts
+	.proc senddata	; IN: <A>=data
+	sta EGO_REG_DATA
+senddw	bit EGO_REG_STATUS
+	bmi senddw
+	rts
+	.endp
 
 
 NEWLINE:	lda	#EOL
@@ -577,7 +544,7 @@ OUTCH:		jmp 0
 mantacnt	.byte 0
 mantajfy	.byte 8
 
-		icl "manta.asm"
+		icl "EgoDemo-Manta.asm"
 	
 		.endp
 	
