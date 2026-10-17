@@ -1,5 +1,5 @@
 #define EGO_MAX_SPRITES 64
-#define EGO_MAX_SHAPES 64
+#define EGO_MAX_SHAPES 256
 
 #define EGO_MODE_ATARI 0
 #define EGO_MODE_USB 1
@@ -33,7 +33,10 @@
 #define EGO_CMD_SPRITE_MODE 17
 #define EGO_CMD_CHARSET 18
 #define EGO_CMD_CHAR_TO_VIDEO 19
-#define EGO_CMD_MOVEMENT 99
+#define EGO_CMD_SET_CHAR 20
+#define EGO_CMD_GET_CHAR 21
+
+#define EGO_CMD_DEBUG 99
 
 #define EGO_ST_IDLE 0
 #define EGO_ST_SHAPE_NO 1
@@ -62,9 +65,26 @@
 #define EGO_ST_SPRITE_MODE 24
 #define EGO_ST_CHARSET_NO 25
 #define EGO_ST_CHARSET_DATA 26
+#define EGO_ST_CHR2GFX_SRC_LO 27
+#define EGO_ST_CHR2GFX_SRC_HI 28
+#define EGO_ST_CHR2GFX_SRC_INC_LO 29
+#define EGO_ST_CHR2GFX_SRC_INC_HI 30
+#define EGO_ST_CHR2GFX_DST_LO 31
+#define EGO_ST_CHR2GFX_DST_HI 32
+#define EGO_ST_CHR2GFX_DST_INC_LO 33
+#define EGO_ST_CHR2GFX_DST_INC_HI 34
+#define EGO_ST_CHR2GFX_WIDTH 35
+#define EGO_ST_CHR2GFX_HEIGHT 36
+#define EGO_ST_CHR2GFX_CHARSET_NO 37
+#define EGO_ST_CHR2GFX_SCROLL 38
+#define EGO_ST_CHR2GFX_COL38 39
+#define EGO_ST_CHAR_NO 40
+#define EGO_ST_CHAR_DATA 41
+#define EGO_ST_CHAR_GET_DATA 42
 
 #define EGO_MODE_XOR 0
 #define EGO_MODE_MASK 1
+#define EGO_MODE_SPECIAL 2
 
 /*
 Sprite data:
@@ -81,6 +101,7 @@ typedef struct
 	uint8_t bitsperpix;
 	uint8_t *data;
 	uint8_t *mask;
+	uint8_t *shadow;
 } shape_t;
 
 typedef struct

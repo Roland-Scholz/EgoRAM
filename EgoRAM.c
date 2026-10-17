@@ -58,7 +58,7 @@ static uint8_t *char_font = (uint8_t *)vt100_font_8x8;
 static uint32_t mode;
 
 static volatile uint8_t *video_ram;
-static volatile uint8_t *char_ram;
+// static volatile uint8_t *char_ram;
 static volatile uint8_t *cart_d5xx;
 static volatile uint32_t ticks;
 static bool uart_init_once;
@@ -77,10 +77,19 @@ static uint16_t ego_blitheight;
 static uint16_t ego_line_ptr[256];
 static uint16_t ego_addr;
 static uint16_t ego_len;
+static uint16_t ego_src_ptr;
+static uint16_t ego_dst_ptr;
+static uint16_t ego_src_inc;
+static uint16_t ego_dst_inc;
+static uint8_t ego_chr2gfx_width;
+static uint8_t ego_chr2gfx_height;
+static uint8_t ego_chr2gfx_scroll;
+static uint8_t ego_chr2gfx_col38;
+static uint8_t ego_char_no;
 
 static shape_t shape_array[EGO_MAX_SHAPES];
 static sprite_t sprite_array[EGO_MAX_SPRITES];
-static uint8_t charset_array[2][2048];
+static uint8_t *charset_array[256];
 
 static PIO pio = pio0;
 
@@ -168,11 +177,12 @@ void __not_in_flash_func(sprite_draw)(sprite_t *sp)
     int xvstart, vstart;
     int xlen, ylen;
     int i, x, y;
+
     uint8_t mask;
+    uint8_t shadow;
     uint16_t vpos;
     uint8_t *sppos, *mpos;
     uint8_t b, c, m, data;
-    bool maskon;
 
     // ego_log("blitwidth: %d, blitheight %d\n", ego_blitwidth, ego_blitheight);
     // ego_log("sprite_draw: shape_no:%d, x:%d y:%d, width:%d, height: %d, bpp: %d\n", shape_no, xpos, ypos, width, height, bpp);
@@ -188,26 +198,32 @@ void __not_in_flash_func(sprite_draw)(sprite_t *sp)
     if (shape_array[shape_no].bitsperpix == 2 && shape_array[shape_no].mask == NULL)
     {
         shape_array[shape_no].mask = malloc(width * height);
+        shape_array[shape_no].shadow = malloc(width * height);
 
         vpos = 0;
         for (y = 0; y < height; y++)
         {
-            maskon = false;
             for (x = 0; x < width; x++)
             {
                 mask = 0xc0;
+                shadow = 0x80;
+
                 data = shape_array[shape_no].data[vpos];
                 shape_array[shape_no].mask[vpos] = 0;
+                shape_array[shape_no].shadow[vpos] = 0;
 
                 for (i = 0; i < 4; i++)
                 {
                     if (!(data & mask))
                     {
                         shape_array[shape_no].mask[vpos] |= mask;
-                        // if (!(data & mask))
-                        //   maskon = ~maskon;
+                    }
+                    else
+                    {
+                        shape_array[shape_no].shadow[vpos] |= shadow;
                     }
                     mask >>= 2;
+                    shadow >>= 2;
                 }
                 // ego_log("%02X ", shape_array[shape_no].mask[vpos]);
                 vpos++;
@@ -225,7 +241,7 @@ void __not_in_flash_func(sprite_draw)(sprite_t *sp)
     ylen = height - ystart;
 
     // check bottom bound
-    if (ypos >= ego_blitheight + height)
+    if (ypos >= ego_blitheight)
     {
         ylen = ego_blitheight + height - ypos;
     }
@@ -247,14 +263,20 @@ void __not_in_flash_func(sprite_draw)(sprite_t *sp)
     if (bytex > ego_blitwidth)
         xlen = bytex - ego_blitwidth;
 
-    sppos = &(shape_array[shape_no].data[ystart * width + xstart]);
+    if (sp->mode == EGO_MODE_SPECIAL)
+    {
+        sppos = &(shape_array[shape_no].shadow[ystart * width + xstart]);
+    }
+    else
+    {
+        sppos = &(shape_array[shape_no].data[ystart * width + xstart]);
+    }
     mpos = &(shape_array[shape_no].mask[ystart * width + xstart]);
 
     // ego_log("sprite bytex:%d pixx:%d xstart:%d xlen:%d xvstart:%d ystart:%d ylen:%d vstart:%d mpos: %p sppos: %p\n", bytex, pixx, xstart, xlen, xvstart, ystart, ylen, vstart, mpos, sppos);
 
     for (y = 0; y < ylen; y++)
     {
-
         vpos = ego_line_ptr[vstart + y] + xvstart;
 
         c = 0;
@@ -269,15 +291,34 @@ void __not_in_flash_func(sprite_draw)(sprite_t *sp)
         {
             b = read_vram(vpos + x);
 
-            if (sp->mode == EGO_MODE_MASK)
-            {
-                b &= (m | (mpos[x] >> pixx));
-                b |= (c | (sppos[x] >> pixx));
-            }
-            else
+            if (sp->mode == EGO_MODE_XOR)
             {
                 b ^= (c | (sppos[x] >> pixx));
             }
+            else
+            {
+                if (sp->mode == EGO_MODE_MASK)
+                {
+                    b &= (m | (mpos[x] >> pixx));
+                    b |= (c | (sppos[x] >> pixx));
+                }
+                else
+                {
+                    mask = 0xc0;
+                    c |= (sppos[x] >> pixx);
+                    for (i = 0; i < 4; i++)
+                    {
+                        if (!(b & mask))
+                        {
+                            c &= ~mask;
+                        }
+                        mask >>= 2;
+                    }
+                    b &= (m | (mpos[x] >> pixx));
+                    b |= c;
+                }
+            }
+
             write_vram(vpos + x, b);
 
             c = (sppos[x]) << (8 - pixx);
@@ -287,14 +328,26 @@ void __not_in_flash_func(sprite_draw)(sprite_t *sp)
         if (pixx != 0 && bytex < ego_blitwidth)
         {
             b = read_vram(vpos + x);
-            if (sp->mode == EGO_MODE_MASK)
+            if (sp->mode == EGO_MODE_XOR)
             {
-                b &= (m | fill_back[pixx]);
-                b |= c;
+                b ^= c;
             }
             else
             {
-                b ^= c;
+                if (sp->mode == EGO_MODE_SPECIAL)
+                {
+                    mask = 0xc0;
+                    for (i = 0; i < 4; i++)
+                    {
+                        if (!(b & mask))
+                        {
+                            c &= ~mask;
+                        }
+                        mask >>= 2;
+                    }
+                }
+                b &= (m | fill_back[pixx]);
+                b |= c;
             }
             write_vram(vpos + x, b);
         }
@@ -309,7 +362,7 @@ void __not_in_flash_func(render_sprites)(void)
 
     sprite_t *sp;
 
-    for (int i = 0; i < EGO_MAX_SPRITES; i++)
+    for (int i = EGO_MAX_SPRITES - 1; i >= 0; i--)
     {
         sp = &sprite_array[i];
 
@@ -359,6 +412,59 @@ void do_movement()
     }
 
     cart_d5xx[EGO_REG_STATUS] &= ~0x80;
+}
+
+void __not_in_flash_func(char_to_video)()
+{
+    int i, x, y;
+    int vypos;
+    int line;
+    uint16_t src_pos;
+    uint16_t dst_pos;
+    uint8_t b, c;
+
+    src_pos = ego_src_ptr & 0x3fff;
+    dst_pos = ego_dst_ptr & 0x3fff;
+
+    // ego_log("char2gfx src:%04X, inc:%04X, dst:%04X, inc:%04X, width:%02X, heigth:%02X, charset:%02X, scroll:%02X\n", src_pos, ego_src_inc, dst_pos, ego_dst_inc, ego_chr2gfx_width, ego_chr2gfx_height, ego_charset_no, ego_chr2gfx_scroll);
+
+    for (y = 0; y < ego_chr2gfx_height; y++)
+    {
+        for (line = 0; line < 8; line++)
+        {
+            b = 0;
+            for (x = 0; x < ego_chr2gfx_width; x++)
+            {
+                c = charset_array[ego_charset_no][(video_ram[src_pos + x] << 3) + line];
+                b |= (c >> ego_chr2gfx_scroll);
+                video_ram[dst_pos + line * ego_dst_inc + x] = b;
+                b = c << (8 - ego_chr2gfx_scroll);
+            }
+            if (ego_chr2gfx_col38)
+            {
+                video_ram[dst_pos + line * ego_dst_inc] = 0;
+                video_ram[dst_pos + line * ego_dst_inc + 39] = 0;
+            }
+        }
+        src_pos += ego_src_inc;
+        dst_pos += (ego_dst_inc << 3);
+    }
+}
+
+void print_debug()
+{
+    sprite_t *sp;
+    int i;
+
+    for (i = EGO_MAX_SPRITES - 1; i >= 0; i--)
+    {
+        sp = &sprite_array[i];
+
+        if (sp->enabled)
+        {
+            ego_log("sprite:%d, mode:%d, shape:%d, xpos:%d, ypos:%d\n", i, sp->mode, sp->shape_no, sp->xpos, sp->ypos);
+        }
+    }
 }
 
 void __not_in_flash_func(do_data)(uint8_t data)
@@ -477,7 +583,7 @@ void __not_in_flash_func(do_data)(uint8_t data)
         if (ego_cnt >= ego_line_no)
         {
             ego_state = EGO_ST_IDLE;
-            ego_log("cnt:%d %04X\n", ego_cnt, ego_line_ptr[ego_cnt - 1]);
+            // ego_log("cnt:%d %04X\n", ego_cnt, ego_line_ptr[ego_cnt - 1]);
         }
         else
             ego_state = EGO_ST_LINE_DATA_LO;
@@ -511,7 +617,11 @@ void __not_in_flash_func(do_data)(uint8_t data)
         ego_state = EGO_ST_IDLE;
         break;
     case EGO_ST_CHARSET_NO:
-        ego_charset_no = data & 0x01;
+        ego_charset_no = data;
+        if (charset_array[ego_charset_no] == NULL)
+        {
+            charset_array[ego_charset_no] = malloc(2048);
+        }
         ego_state = EGO_ST_CHARSET_DATA;
         ego_cnt = 0;
         break;
@@ -521,33 +631,87 @@ void __not_in_flash_func(do_data)(uint8_t data)
         if (ego_cnt >= 2048)
         {
             ego_state = EGO_ST_IDLE;
-            ego_log("charset %d loaded\n", ego_charset_no);
+            // ego_log("charset %d loaded\n", ego_charset_no);
         }
+        break;
+    case EGO_ST_CHR2GFX_SRC_LO:
+        ego_src_ptr = data;
+        ego_state = EGO_ST_CHR2GFX_SRC_HI;
+        break;
+    case EGO_ST_CHR2GFX_SRC_HI:
+        ego_src_ptr |= data << 8;
+        ego_state = EGO_ST_CHR2GFX_SRC_INC_LO;
+        break;
+    case EGO_ST_CHR2GFX_SRC_INC_LO:
+        ego_src_inc = data;
+        ego_state = EGO_ST_CHR2GFX_SRC_INC_HI;
+        break;
+    case EGO_ST_CHR2GFX_SRC_INC_HI:
+        ego_src_inc |= data << 8;
+        ego_state = EGO_ST_CHR2GFX_DST_LO;
+        break;
+    case EGO_ST_CHR2GFX_DST_LO:
+        ego_dst_ptr = data;
+        ego_state = EGO_ST_CHR2GFX_DST_HI;
+        break;
+    case EGO_ST_CHR2GFX_DST_HI:
+        ego_dst_ptr |= data << 8;
+        ego_state = EGO_ST_CHR2GFX_DST_INC_LO;
+        break;
+    case EGO_ST_CHR2GFX_DST_INC_LO:
+        ego_dst_inc = data;
+        ego_state = EGO_ST_CHR2GFX_DST_INC_HI;
+        break;
+    case EGO_ST_CHR2GFX_DST_INC_HI:
+        ego_dst_inc |= data << 8;
+        ego_state = EGO_ST_CHR2GFX_WIDTH;
+        break;
+    case EGO_ST_CHR2GFX_WIDTH:
+        ego_chr2gfx_width = data;
+        ego_state = EGO_ST_CHR2GFX_HEIGHT;
+        break;
+    case EGO_ST_CHR2GFX_HEIGHT:
+        ego_chr2gfx_height = data;
+        ego_state = EGO_ST_CHR2GFX_CHARSET_NO;
+        break;
+    case EGO_ST_CHR2GFX_CHARSET_NO:
+        ego_charset_no = data;
+        if (ego_cmd == EGO_CMD_SET_CHAR || ego_cmd == EGO_CMD_GET_CHAR)
+            ego_state = EGO_ST_CHAR_NO;
+        else
+            ego_state = EGO_ST_CHR2GFX_SCROLL;
+        break;
+    case EGO_ST_CHR2GFX_SCROLL:
+        ego_chr2gfx_scroll = data & 0x07;
+        ego_state = EGO_ST_CHR2GFX_COL38;
+        break;
+    case EGO_ST_CHR2GFX_COL38:
+        ego_chr2gfx_col38 = data;
+        ego_state = EGO_ST_IDLE;
+        char_to_video();
+        break;
+    case EGO_ST_CHAR_NO:
+        ego_char_no = data;
+        if (ego_cmd == EGO_CMD_GET_CHAR)
+        {
+            ego_state = EGO_ST_CHAR_GET_DATA;
+            cart_d5xx[EGO_REG_DATA] = charset_array[ego_charset_no][(ego_char_no << 3)];
+            ego_cnt = 1;
+        }
+        else
+        {
+            ego_cnt = 0;
+            ego_state = EGO_ST_CHAR_DATA;
+        }
+        break;
+    case EGO_ST_CHAR_DATA:
+        charset_array[ego_charset_no][(ego_char_no << 3) + ego_cnt] = data;
+        ego_cnt++;
+        if (ego_cnt >= 8)
+            ego_state = EGO_ST_IDLE;
         break;
     default:
         break;
-    }
-}
-
-void __not_in_flash_func(char_to_video)()
-{
-    int i, x, y;
-    int ypos, vypos;
-    uint16_t c;
-
-    for (y = 0; y < 25; y++)
-    {
-        ypos = y * 40;
-        for (x = 0; x < 40; x++)
-        {
-            c = char_ram[ypos + x] << 3;
-
-            for (i = 0; i < 8; i++)
-            {
-                vypos = ego_line_ptr[(y << 3) + i];
-                video_ram[vypos + x] = charset_array[0][c + i];
-            }
-        }
     }
 }
 
@@ -615,10 +779,16 @@ void __not_in_flash_func(do_command)(uint8_t data)
         ego_state = EGO_ST_CHARSET_NO;
         break;
     case EGO_CMD_CHAR_TO_VIDEO:
-        char_to_video();
+        ego_state = EGO_ST_CHR2GFX_SRC_LO;
         break;
-    case EGO_CMD_MOVEMENT:
-        do_movement();
+    case EGO_CMD_SET_CHAR:
+        ego_state = EGO_ST_CHR2GFX_CHARSET_NO;
+        break;
+    case EGO_CMD_GET_CHAR:
+        ego_state = EGO_ST_CHR2GFX_CHARSET_NO;
+        break;
+    case EGO_CMD_DEBUG:
+        print_debug();
         break;
     default:
         break;
@@ -628,8 +798,8 @@ void __not_in_flash_func(do_command)(uint8_t data)
 void __not_in_flash_func(core1_main)()
 {
     uint32_t msg;
-    uint32_t data;
-    uint32_t addr;
+    uint8_t data;
+    uint16_t addr;
 
     systick_init();
 
@@ -684,12 +854,24 @@ void __not_in_flash_func(putChar)(int xpos, int ypos, uint8_t c)
 
 uint8_t read_d5xx(uint8_t addr)
 {
+
+    switch (ego_state)
+    {
+    case EGO_ST_CHAR_GET_DATA:
+        cart_d5xx[addr] = charset_array[ego_charset_no][(ego_char_no << 3) + ego_cnt];
+        ego_cnt++;
+        if (ego_cnt > 7)
+            ego_state = EGO_ST_IDLE;
+        break;
+    default:
+        break;
+    }
+
     return cart_d5xx[addr];
 }
 
 void __not_in_flash_func(write_d5xx)(uint8_t addr, uint8_t data)
 {
-
     cart_d5xx[EGO_REG_STATUS] |= 0x80;
 
     if (multicore_fifo_wready)
@@ -909,14 +1091,14 @@ int main()
 
     while (to_ms_since_boot(get_absolute_time()) < 100)
     {
-        if (gpio_get(ATARI_PHI2_PIN))
+        if (!gpio_get(ATARI_PHI2_PIN))
         {
             mode = EGO_MODE_ATARI;
         }
     }
 
     video_ram = get_cart_ram();
-    char_ram = video_ram + 0x3C00;
+    //   char_ram = video_ram + 0x3800;
     cart_d5xx = get_cart_d5xx();
 
     // memset((void *)video_ram, 0x01, 4 * 1024);
