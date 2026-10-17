@@ -14,6 +14,10 @@
 	icl "..\EgoRAM-Equates.asm"
 	icl "EgoUridium-Constants.asm"
 
+	.use hardware
+	.use os_xl
+
+
 playerScore = $20
 indexCurrentEnemyFormation = $24
 enemyMovementStrategyLoPtr = $70
@@ -290,7 +294,6 @@ startOfSurfaceDataForCurrentLevel = dreadnaught + $2040
 
 surfaceTextureCharacterSet = $CAFE				;to do!!!
 
-mathpack		= $d800
 intCharset		= $cc00
 normCharset		= $e000
 player0data		= intCharset
@@ -318,13 +321,32 @@ explosion_major46	= 46
 ;
 ;------------------------------------------------------------
 
-		org $0800
+		org $8000
+
+		.proc init
+		mva #1 coldst
+		ldx #>[[.len main]+$ff]
+		ldy #0
+loop
+from		lda main_from,y
+to 		sta main,y
+		iny
+		bne loop
+
+		inc from+2
+		inc to+2
+		dex
+		bne loop
+		jmp main	
+		.endp
+	
+		org $2000
 		
 ;------------------------------------------------------------
 ;
 ;------------------------------------------------------------
-	
-		.proc main
+main_from
+		.proc main, $800
 		
 		jsr initGame		
 
@@ -5534,6 +5556,11 @@ text:		.word debugScreen
 gfxtop		= $da00
 gfxbottom	= gfxtop + $280
 
+main_end
 		.endp
+		.print "INFO: Main from ", main_from
+		.print "INFO: Main starts at ", main
+		.print "INFO: Main ends at ", main.main_end
 
-		run main
+		run init
+	
