@@ -25,13 +25,13 @@ eol		= $9b
 		icl "..\System-Equates.asm"
 		icl "..\EgoRAM-Equates.asm"
 		icl "EgoUridium-Constants.asm"
-
+		
 ;------------------------------------------------------------
 ; upload all static data to EgoRam,
 ; in order to keep EgoUridium shorter
 ;------------------------------------------------------------
 
-		org $0800
+		org $2000
 		
 		.proc main
 
@@ -39,12 +39,13 @@ eol		= $9b
 		jsr convert
 		jsr uploadAllSprites
 		jsr uploadCharsets
+		rts
 		
-		lda #<message
-		ldx #>message
-		jsr printstr
-		
-endless		jmp endless
+;		lda #<message
+;		ldx #>message
+;		jsr printstr
+;		
+;endless		jmp endless
 	
 ;------------------------------------------------------------
 ; convert 4kb charsets 
@@ -136,9 +137,10 @@ uploadCharset1	lda ptr+1
 		
 		ldx #4					;upload 1k;
 		ldy #0
-uploadCharset2	lda (ptr),y
-		sta EGO_REG_DATA
-		iny
+uploadCharset2	mva (ptr),y+ EGO_REG_DATA
+		mva (ptr),y+ EGO_REG_DATA
+		mva (ptr),y+ EGO_REG_DATA
+		mva (ptr),y+ EGO_REG_DATA
 		bne uploadCharset2
 		inc ptr+1
 		dex
@@ -178,7 +180,7 @@ uploadSprites1	txa
 		jsr space
 		
 		jsr uploadSprite
-		jsr addPtr64
+		adw ptr #64
 		inx
 		cpx cnt
 		bne uploadSprites1
@@ -186,21 +188,12 @@ uploadSprites1	txa
 		jsr newline
 		rts
 
-;------------------------------------------------------------
-;
-;------------------------------------------------------------		
-addPtr64	clc
-		lda ptr
-		adc #64
-		sta ptr
-		bcc addPtr64a
-		inc ptr+1
-addPtr64a	rts
 	
 ;------------------------------------------------------------
 ; 
 ;------------------------------------------------------------		
-uploadSprite	ldy #0
+		.proc uploadSprite
+		ldy #0
 		lda #EGO_CMD_SHAPE_DATA
 		sta EGO_REG_CMD
 		stx EGO_REG_DATA				;shape no
@@ -210,33 +203,37 @@ uploadSprite	ldy #0
 		sta EGO_REG_DATA				;shape y lines
 		lda #2				
 		sta EGO_REG_DATA				;shape bpp
-uploadSprite1	lda (ptr),y
-		sta EGO_REG_DATA
-		iny
+loop		mva (ptr),y+ EGO_REG_DATA
+		mva (ptr),y+ EGO_REG_DATA
+		mva (ptr),y+ EGO_REG_DATA
 		cpy #63
-		bne uploadSprite1
+		bne loop
 		rts
+		.endp
 
-printstr	sta ptr
+		.proc printstr
+		sta ptr
 		stx ptr+1
 		ldx #0
-printstr1	lda (ptr,x)
+loop		lda (ptr,x)
 		jsr print
 		cmp #eol
-		beq printstrEx
+		beq lineEnd
 		inc ptr
-		bcc printstr1
+		bne loop
 		inc ptr+1
-		bne printstr1
+		bne loop
 
-printstrEx	rts		
+lineEnd		rts
+		.endp
+	
 ;------------------------------------------------------------
 ;
 ;------------------------------------------------------------
 space		lda #' '
 		bne print
 newline		lda #eol
-print		pha
+print		 pha
 		txa
 		pha
 		tya

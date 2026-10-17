@@ -150,6 +150,7 @@ nmist	= $d40f
 
 
 	.local os_xl
+	
 ;	OS VARIABLES
 ; Zero page
 casini = $02
@@ -322,23 +323,27 @@ ch	= $2fc
 ;
 ;
 
-iocb	= $340
-ichid	= $340
-icdno	= $341
-iccom	= $342
-icsta	= $343
-icbal	= $344
-icbah	= $345
-icptl	= $346
-icpth	= $347
-icbll	= $348
-icblh	= $349
-icax1	= $34a
-icax2	= $34b
-icax3	= $34c
-icax4	= $34d
-icax5	= $34e
-icax6	= $34f
+iocb0	= $340
+
+; Offsets in ICOB
+
+ichid	= $0
+icdno	= $1
+iccom	= $2
+icsta	= $3
+icbal	= $4
+icbah	= $5
+icptl	= $6
+icpth	= $7
+icbll	= $8
+icblh	= $9
+icax1	= $a
+icax2	= $b
+icax3	= $c
+icax4	= $d
+icax5	= $e
+icax6	= $f
+
 basicf	= $3f8
 gintl	= $3fa
 
@@ -466,6 +471,8 @@ coldsv	= $e477	. Coldstart vector
 ;	FLOATING POINT MATH ROUTINES
 ;
 ;
+	org $d800
+
 	.local mathpack
 afp    = $d800	;
 fasc   = $d8e6	;
